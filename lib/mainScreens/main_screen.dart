@@ -11,13 +11,11 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:utransfer_user/mainScreens/search_places_screen.dart';
 import 'package:utransfer_user/mainScreens/select_nearest_active_driver_screen.dart';
-import 'package:utransfer_user/models/direction_details_info.dart';
 
 import '../assistants/assistant_methods.dart';
 import '../assistants/geofire_assistant.dart';
 import '../global/global.dart';
 import '../infoHandler/app_info.dart';
-import '../main.dart';
 import '../models/active_nearby_available_drivers.dart';
 import '../widgets/my_drawer.dart';
 import '../widgets/progress_dialog.dart';
@@ -282,7 +280,6 @@ class _MainScreenState extends State<MainScreen>
   saveRideRequestInformation()
   {
     //1. save the RideRequest Information
-
     referenceRideRequest = FirebaseDatabase.instance.ref().child("All Ride Requests").push();
 
     var originLocation = Provider.of<AppInfo>(context, listen: false).userPickUpLocation;
@@ -290,29 +287,28 @@ class _MainScreenState extends State<MainScreen>
 
     Map originLocationMap =
     {
-      //"key" : value
+      //"key": value,
       "latitude": originLocation!.locationLatitude.toString(),
       "longitude": originLocation!.locationLongitude.toString(),
     };
 
     Map destinationLocationMap =
     {
-      //"key" : value
+      //"key": value,
       "latitude": destinationLocation!.locationLatitude.toString(),
       "longitude": destinationLocation!.locationLongitude.toString(),
     };
 
     Map userInformationMap =
     {
-      "origin": originLocationMap ,
+      "origin": originLocationMap,
       "destination": destinationLocationMap,
-      "time" : DateTime.now().toString(),
+      "time": DateTime.now().toString(),
       "userName": userModelCurrentInfo!.name,
       "userPhone": userModelCurrentInfo!.phone,
       "originAddress": originLocation.locationName,
       "destinationAddress": destinationLocation.locationName,
       "driverId": "waiting",
-
     };
 
     referenceRideRequest!.set(userInformationMap);
@@ -341,7 +337,6 @@ class _MainScreenState extends State<MainScreen>
       Future.delayed(const Duration(milliseconds: 4000), ()
       {
         SystemNavigator.pop();
-        //MyApp.restartApp(context);
       });
 
       return;
@@ -350,7 +345,40 @@ class _MainScreenState extends State<MainScreen>
     //active driver available
     await retrieveOnlineDriversInformation(onlineNearByAvailableDriversList);
 
-    Navigator.push(context, MaterialPageRoute(builder: (c)=> SelectNearestActiveDriversScreen(referenceRideRequest: referenceRideRequest)));
+    var response = await Navigator.push(context, MaterialPageRoute(builder: (c)=> SelectNearestActiveDriversScreen(referenceRideRequest: referenceRideRequest)));
+
+    if(response == "driverChoosed")
+    {
+      FirebaseDatabase.instance.ref()
+          .child("drivers")
+          .child(chosenDriverId!)
+          .once()
+          .then((snap)
+      {
+        if(snap.snapshot.value != null)
+        {
+          //send notification to that specific driver
+          sendNotificationToDriverNow(chosenDriverId!);
+        }
+        else
+        {
+          Fluttertoast.showToast(msg: "This driver do not exist. Try again.");
+        }
+      });
+    }
+  }
+
+  sendNotificationToDriverNow(String chosenDriverId)
+  {
+    //assign/SET rideRequestId to newRideStatus in
+    // Drivers Parent node for that specific choosen driver
+    FirebaseDatabase.instance.ref()
+        .child("drivers")
+        .child(chosenDriverId!)
+        .child("newRideStatus")
+        .set(referenceRideRequest!.key);
+
+    //automate the push notification
   }
 
   retrieveOnlineDriversInformation(List onlineNearestDriversList) async
