@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:utransfer_user/global/global.dart';
+import 'package:utransfer_user/mainScreens/profile_screen.dart';
+import 'package:utransfer_user/mainScreens/trips_history_screen.dart';
 import 'package:utransfer_user/splashScreen/splash_screen.dart';
+
+import '../mainScreens/about_screen.dart';
 
 class MyDrawer extends StatefulWidget
 {
@@ -70,7 +74,7 @@ class _MyDrawerState extends State<MyDrawer>
           GestureDetector(
             onTap: ()
             {
-
+              Navigator.push(context, MaterialPageRoute(builder: (c) => TripsHistoryScreen()));
             },
             child: const ListTile(
               leading: Icon(Icons.history, color: Colors.black,),
@@ -86,7 +90,7 @@ class _MyDrawerState extends State<MyDrawer>
           GestureDetector(
             onTap: ()
             {
-
+              Navigator.push(context, MaterialPageRoute(builder: (c) => ProfileScreen()));
             },
             child: const ListTile(
               leading: Icon(Icons.person, color: Colors.black,),
@@ -102,7 +106,7 @@ class _MyDrawerState extends State<MyDrawer>
           GestureDetector(
             onTap: ()
             {
-
+              Navigator.push(context, MaterialPageRoute(builder: (c) => AboutScreen()));
             },
             child: const ListTile(
               leading: Icon(Icons.info, color: Colors.black,),

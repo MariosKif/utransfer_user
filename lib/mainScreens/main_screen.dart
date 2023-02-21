@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,8 +10,10 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:utransfer_user/mainScreens/rate_driver_screen.dart';
 import 'package:utransfer_user/mainScreens/search_places_screen.dart';
 import 'package:utransfer_user/mainScreens/select_nearest_active_driver_screen.dart';
+import 'package:utransfer_user/widgets/pay_fare_amount_dialog.dart';
 
 import '../assistants/assistant_methods.dart';
 import '../assistants/geofire_assistant.dart';
@@ -43,6 +46,8 @@ class _MainScreenState extends State<MainScreen>
 
   GlobalKey<ScaffoldState> sKey = GlobalKey<ScaffoldState>();
   double searchLocationContainerHeight = 220;
+  double  waitingResponseFromDriverContainerHeight = 0;
+  double assignedDriverInfoContainerHeight = 0;
 
   Position? userCurrentPosition;
   var geoLocator = Geolocator();
@@ -67,6 +72,11 @@ class _MainScreenState extends State<MainScreen>
   List<ActiveNearbyAvailableDrivers> onlineNearByAvailableDriversList = [];
 
   DatabaseReference? referenceRideRequest;
+  String driverRideStatus = "Driver is Coming";
+  StreamSubscription<DatabaseEvent>? tripRideRequestInfoStreamSubscription;
+
+  String userRideRequestStatus = "";
+  bool requestPositionInfo = true;
 
 
 
@@ -267,6 +277,8 @@ class _MainScreenState extends State<MainScreen>
     userEmail = userModelCurrentInfo!.email!;
 
     initializeGeoFireListener();
+
+    AssistantMethods.readTripsKeysForOnlineUser(context);
   }
 
   @override
@@ -313,8 +325,157 @@ class _MainScreenState extends State<MainScreen>
 
     referenceRideRequest!.set(userInformationMap);
 
+    tripRideRequestInfoStreamSubscription = referenceRideRequest!.onValue.listen((eventSnap) async
+    {
+      if(eventSnap.snapshot.value == null)
+        {
+          return;
+        }
+
+      if((eventSnap.snapshot.value as Map)["car_details"] != null)
+        {
+          setState(() {
+            driverCarDetails = (eventSnap.snapshot.value as Map)["car_details"].toString();
+          });
+        }
+
+      if((eventSnap.snapshot.value as Map)["driverPhone"] != null)
+      {
+        setState(() {
+          driverPhone = (eventSnap.snapshot.value as Map)["driverPhone"].toString();
+        });
+      }
+
+      if((eventSnap.snapshot.value as Map)["driverName"] != null)
+      {
+        setState(() {
+          driverName = (eventSnap.snapshot.value as Map)["driverName"].toString();
+        });
+      }
+
+      if((eventSnap.snapshot.value as Map)["status"] != null)
+        {
+          userRideRequestStatus = (eventSnap.snapshot.value as Map)["status"].toString();
+        }
+
+      if((eventSnap.snapshot.value as Map)["driverLocation"] != null)
+      {
+        double driverCurrentPositionLat = double.parse((eventSnap.snapshot.value as Map)["driverLocation"]["latitude"].toString());
+        double driverCurrentPositionLng = double.parse((eventSnap.snapshot.value as Map)["driverLocation"]["longitude"].toString());
+
+        LatLng driverCurrentPositionLatLng = LatLng(driverCurrentPositionLat, driverCurrentPositionLng);
+
+        //status = accepted
+        if(userRideRequestStatus == "accepted")
+          {
+            updateArrivalTimeToUserPickupLocation(driverCurrentPositionLatLng);
+          }
+        //status = arrived
+        if(userRideRequestStatus == "arrived")
+        {
+          setState(() {
+            driverRideStatus = "Driver has arrived";
+          });
+        }
+        //status = ontrip
+        if(userRideRequestStatus == "ontrip")
+        {
+          updateReachingTimeToUserDropOffLocation(driverCurrentPositionLatLng);
+        }
+
+        //status = ended
+        if(userRideRequestStatus == "ended")
+        {
+          if((eventSnap.snapshot.value as Map)["fareAmount"] != null)
+            {
+              double fareAmount =  double.parse((eventSnap.snapshot.value as Map)["fareAmount"].toString());
+
+             var response = await showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext c) => PayFareAmountDialog(
+                    fareAmount: fareAmount,
+                  ),
+              );
+
+             if(response == "Payed")
+               {
+                  // user can rate the driver now
+                 if((eventSnap.snapshot.value as Map)["driverId"] != null)
+                   {
+                     String assignedDriverId = (eventSnap.snapshot.value as Map)["driverId"].toString();
+
+                     Navigator.push(
+                         context,
+                         MaterialPageRoute(builder: (c)=> RateDriverScreen(
+                             assignedDriverId: assignedDriverId,
+                         ))
+                     );
+                   }
+               }
+            }
+        }
+      }
+    });
+
     onlineNearByAvailableDriversList = GeoFireAssistant.activeNearbyAvailableDriversList;
     searchNearestOnlineDrivers();
+  }
+
+  updateArrivalTimeToUserPickupLocation(driverCurrentPositionLatLng) async
+  {
+    if(requestPositionInfo == true)
+      {
+        requestPositionInfo = false;
+
+        LatLng userPickUpPosition = LatLng(userCurrentPosition!.latitude, userCurrentPosition!.longitude);
+
+        var directionDetailsInfo = await AssistantMethods.obtainOriginToDestinationDirectionDetails(
+            driverCurrentPositionLatLng,
+            userPickUpPosition
+        );
+
+        if(directionDetailsInfo == null)
+          {
+            return;
+          }
+
+        setState(() {
+          driverRideStatus = "Driver is coming:: " + directionDetailsInfo.duration_text.toString();
+        });
+
+        requestPositionInfo = true;
+      }
+  }
+
+  updateReachingTimeToUserDropOffLocation(driverCurrentPositionLatLng) async
+  {
+    if(requestPositionInfo == true)
+    {
+      requestPositionInfo = false;
+
+      var dropOffLocation = Provider.of<AppInfo>(context, listen: false).userDropOffLocation;
+      LatLng userDestinationPosition = LatLng(
+          dropOffLocation!.locationLatitude!,
+          dropOffLocation!.locationLongitude!
+      );
+
+      var directionDetailsInfo = await AssistantMethods.obtainOriginToDestinationDirectionDetails(
+          driverCurrentPositionLatLng,
+          userDestinationPosition
+      );
+
+      if(directionDetailsInfo == null)
+      {
+        return;
+      }
+
+      setState(() {
+        driverRideStatus = "Arrival to destination in " + directionDetailsInfo.duration_text.toString() + " minutes";
+      });
+
+      requestPositionInfo = true;
+    }
   }
 
   searchNearestOnlineDrivers() async
@@ -359,6 +520,44 @@ class _MainScreenState extends State<MainScreen>
         {
           //send notification to that specific driver
           sendNotificationToDriverNow(chosenDriverId!);
+
+          //Display Waiting response from driver UI
+          showWaitingResponseFromDriverUI();
+
+          //Response from driver
+          FirebaseDatabase.instance.ref()
+              .child("drivers")
+              .child(chosenDriverId!)
+              .child("newRideStatus")
+              .onValue
+              .listen((eventSnapshot)
+          {
+          //Driver has  cansel the rideRequest :: Push Notification
+          //(newRideStatus = "idle")
+            if(eventSnapshot.snapshot.value == "idle")
+              {
+                Fluttertoast.showToast(msg: "Driver has canseled your ride request. "
+                    "Please choose an other driver");
+
+                Future.delayed(const Duration(milliseconds: 4000), ()
+                {
+                  Fluttertoast.showToast(msg: "Please restart the app now");
+
+                  SystemNavigator.pop();
+                });
+              }
+
+
+            //Driver has accepted the rideRequest :: Push Notification
+            //(newRideStatus = "accepted")
+            if(eventSnapshot.snapshot.value == "accepted")
+            {
+              //design and display UI for displaying assigned driver information
+              showUiForAssignedDriverInfo();
+            }
+
+          });
+
         }
         else
         {
@@ -368,10 +567,32 @@ class _MainScreenState extends State<MainScreen>
     }
   }
 
+  showUiForAssignedDriverInfo()
+  {
+    setState(() {
+      searchLocationContainerHeight = 0;
+      waitingResponseFromDriverContainerHeight = 0;
+      assignedDriverInfoContainerHeight = 245;
+    });
+  }
+
+  showWaitingResponseFromDriverUI()
+  {
+    setState(() {
+      searchLocationContainerHeight = 0;
+      waitingResponseFromDriverContainerHeight = 220;
+    });
+  }
+
+  //Change this later because we want to display all the available rides
+  //in a general ride window. From there the driver will be able to select
+  //which ride want to do. Once the driver select the ride will be able to
+  //accept it. Once the ride is accepted a notification will be displayed to
+  //the user to inform him that the ride is accepted.
   sendNotificationToDriverNow(String chosenDriverId)
   {
     //assign/SET rideRequestId to newRideStatus in
-    // Drivers Parent node for that specific choosen driver
+    // Drivers Parent node for that specific chosen driver
     FirebaseDatabase.instance.ref()
         .child("drivers")
         .child(chosenDriverId!)
@@ -379,6 +600,31 @@ class _MainScreenState extends State<MainScreen>
         .set(referenceRideRequest!.key);
 
     //automate the push notification
+    FirebaseDatabase.instance.ref()
+        .child("drivers")
+        .child(chosenDriverId)
+        .child("token").once().then((snap)
+    {
+      if(snap.snapshot.value != null)
+      {
+        String deviceRegistrationToken = snap.snapshot.value.toString();
+
+        //Sent Notification now
+        AssistantMethods.sentNotificationToDriverNow(
+            deviceRegistrationToken,
+            referenceRideRequest!.key.toString(),
+            context
+        );
+        
+        Fluttertoast.showToast(msg: "Driver of your choice will be notified");
+      }
+      else
+        {
+          Fluttertoast.showToast(msg: "Please choose another Driver");
+          return;
+        }
+    });
+
   }
 
   retrieveOnlineDriversInformation(List onlineNearestDriversList) async
@@ -603,6 +849,159 @@ class _MainScreenState extends State<MainScreen>
             ),
           ),
 
+          //ui for waiting response from driver
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: waitingResponseFromDriverContainerHeight,
+              decoration: const BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Center(
+                  child: AnimatedTextKit(
+                    animatedTexts: [
+                      FadeAnimatedText(
+                        'Waiting for response\nfrom driver',
+                        duration: const Duration(seconds: 6),
+                        textAlign: TextAlign.center,
+                        textStyle: const TextStyle(fontSize: 32.0, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      ScaleAnimatedText(
+                        'Please wait...',
+                        duration: const Duration(seconds: 10),
+                        textAlign: TextAlign.center,
+                        textStyle: const TextStyle(fontSize: 32.0, color: Colors.white, fontFamily: 'CanteBury'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          //ui for displaying assigned driver information
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: assignedDriverInfoContainerHeight ,
+              decoration: const BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Text(
+                          driverRideStatus,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    const Divider(
+                      height: 2,
+                      thickness: 2,
+                      color: Colors.white,
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    //driver vehicle details
+                    Text(
+                      driverCarDetails,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 2,
+                    ),
+
+                    //driver name
+                    Text(
+                      driverName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    const Divider(
+                      height: 2,
+                      thickness: 2,
+                      color: Colors.white,
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    //call driver button
+                    Center(
+                      child: ElevatedButton.icon(
+                          onPressed: ()
+                          {
+
+                          },
+                        style: ElevatedButton.styleFrom(
+                          primary: Colors.lightBlue
+                        ),
+                        icon: const Icon(
+                          Icons.phone_android,
+                          color: Colors.black,
+                          size: 22,
+                        ),
+                        label: const Text(
+                          'Call Driver',
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
