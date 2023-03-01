@@ -536,7 +536,7 @@ class _MainScreenState extends State<MainScreen>
           //(newRideStatus = "idle")
             if(eventSnapshot.snapshot.value == "idle")
               {
-                Fluttertoast.showToast(msg: "Driver has canseled your ride request. "
+                Fluttertoast.showToast(msg: "Driver has canceled your ride request. "
                     "Please choose an other driver");
 
                 Future.delayed(const Duration(milliseconds: 4000), ()
@@ -616,7 +616,7 @@ class _MainScreenState extends State<MainScreen>
             context
         );
         
-        Fluttertoast.showToast(msg: "Driver of your choice will be notified");
+        //Fluttertoast.showToast(msg: "Driver of your choice will be notified");
       }
       else
         {
@@ -913,7 +913,7 @@ class _MainScreenState extends State<MainScreen>
                       child: Text(
                           driverRideStatus,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -921,7 +921,7 @@ class _MainScreenState extends State<MainScreen>
                     ),
 
                     const SizedBox(
-                      height: 20,
+                      height: 16,
                     ),
 
                     const Divider(
@@ -931,7 +931,7 @@ class _MainScreenState extends State<MainScreen>
                     ),
 
                     const SizedBox(
-                      height: 20,
+                      height: 16,
                     ),
 
                     //driver vehicle details

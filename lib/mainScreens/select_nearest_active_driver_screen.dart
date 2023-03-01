@@ -33,11 +33,11 @@ class _SelectNearestActiveDriversScreenState extends State<SelectNearestActiveDr
       {
         fareAmount = (AssistantMethods.calculateFareAmountFromOriginToDestination(tripDirectionDetailsInfo!) / 2).toStringAsFixed(1);
       }
-      if(dList[index]["car_details"]["type"].toString() == "Five Door") //means executive type of car - more comfortable pro level
+      if(dList[index]["car_details"]["type"].toString() == "Six seat") //means executive type of car - more comfortable pro level
           {
         fareAmount = (AssistantMethods.calculateFareAmountFromOriginToDestination(tripDirectionDetailsInfo!) * 2).toStringAsFixed(1);
       }
-      if(dList[index]["car_details"]["type"].toString() == "Four Door") // non - executive car - comfortable
+      if(dList[index]["car_details"]["type"].toString() == "Four seat") // non - executive car - comfortable
           {
         fareAmount = (AssistantMethods.calculateFareAmountFromOriginToDestination(tripDirectionDetailsInfo!)).toString();
       }
@@ -129,7 +129,7 @@ class _SelectNearestActiveDriversScreenState extends State<SelectNearestActiveDr
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "\$ " + getFareAmountAccordingToVehicleType(index),
+                      "\ " + getFareAmountAccordingToVehicleType(index),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                       ),
